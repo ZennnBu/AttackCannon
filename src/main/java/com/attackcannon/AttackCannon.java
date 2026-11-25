@@ -20,6 +20,14 @@ public final class AttackCannon extends JavaPlugin {
     private BukkitTask attackTask;
     private boolean attackRunning = false;
 
+    private static final int TOTAL_STRIKES = 5;
+    private static final int TNT_PER_STRIKE = 200;
+    private static final int TOTAL_TNT = 1000;
+
+    private static final int RADIUS = 64;
+    private static final int TNT_PER_TICK = 10;
+    private static final int STRIKE_DELAY = 100;
+
     @Override
     public void onEnable() {
         getLogger().info("AttackCannon enabled!");
@@ -30,6 +38,8 @@ public final class AttackCannon extends JavaPlugin {
         if (attackTask != null) {
             attackTask.cancel();
         }
+
+        attackRunning = false;
     }
 
     @Override
@@ -46,201 +56,188 @@ public final class AttackCannon extends JavaPlugin {
         }
 
         if (!player.hasPermission("attackcannon.use")) {
-            player.sendMessage(ChatColor.RED + "You don't have permission.");
+            player.sendMessage(
+                    ChatColor.RED + "You don't have permission."
+            );
             return true;
         }
 
-        if (args.length != 1 || !args[0].equalsIgnoreCase("here")) {
-            player.sendMessage(ChatColor.YELLOW + "Usage: /attack here");
+        if (args.length != 1
+                || !args[0].equalsIgnoreCase("here")) {
+
+            player.sendMessage(
+                    ChatColor.YELLOW + "Usage: /attack here"
+            );
             return true;
         }
 
         if (attackRunning) {
-            player.sendMessage(ChatColor.RED + "An attack is already running!");
+            player.sendMessage(
+                    ChatColor.RED + "An attack is already running!"
+            );
             return true;
         }
 
         startAttack(player);
-
         return true;
     }
 
     private void startAttack(Player player) {
 
         World world = player.getWorld();
-        Location center = player.getLocation().clone();
-
-        int totalTnt = 1000;
-        int totalStrikes = 5;
-        int tntPerStrike = totalTnt / totalStrikes;
-
-        int radius = 64;
-        int spawnHeight = 50;
+        Location target = player.getLocation().clone();
 
         attackRunning = true;
+
+        int[] strikeIndex = {0};
+        int[] spawnedThisStrike = {0};
+        int[] delayTicks = {0};
+
+        Random random = new Random();
 
         player.sendMessage(
                 ChatColor.RED + "" + ChatColor.BOLD
                         + "ATTACK CANNON ACTIVATED!"
         );
 
+        player.sendMessage(
+                ChatColor.YELLOW
+                        + "5 strikes incoming!"
+        );
+
         world.playSound(
-                center,
+                target,
                 org.bukkit.Sound.ENTITY_WITHER_SPAWN,
                 1.0f,
                 0.7f
         );
 
-        Random random = new Random();
-
-        final int[] strikeNumber = {0};
-
         attackTask = Bukkit.getScheduler().runTaskTimer(
                 this,
-                new Runnable() {
+                () -> {
 
-                    @Override
-                    public void run() {
+                    if (strikeIndex[0] >= TOTAL_STRIKES) {
 
-                        if (strikeNumber[0] >= totalStrikes) {
-                            attackTask.cancel();
-                            attackTask = null;
-                            attackRunning = false;
+                        attackTask.cancel();
+                        attackTask = null;
+                        attackRunning = false;
 
-                            player.sendMessage(
-                                    ChatColor.GREEN
-                                            + "AttackCannon sequence completed!"
-                            );
-
-                            return;
-                        }
-
-                        int currentStrike = strikeNumber[0];
-
-                        Location strikeCenter = center.clone();
-
-                        // First strike at the target location.
-                        // Four additional strikes are placed in a line.
-                        if (currentStrike > 0) {
-                            strikeCenter.add(
-                                    currentStrike * 32,
-                                    0,
-                                    0
-                            );
-                        }
-
-                        strikeCenter.setY(
-                                Math.min(
-                                        world.getMaxHeight() - 10,
-                                        center.getY() + spawnHeight
-                                )
+                        player.sendMessage(
+                                ChatColor.GREEN
+                                        + "AttackCannon completed!"
                         );
+
+                        return;
+                    }
+
+                    if (delayTicks[0] > 0) {
+                        delayTicks[0]--;
+                        return;
+                    }
+
+                    if (spawnedThisStrike[0] == 0) {
 
                         player.sendMessage(
                                 ChatColor.RED
                                         + "Strike "
-                                        + (currentStrike + 1)
+                                        + (strikeIndex[0] + 1)
                                         + "/5 incoming!"
                         );
+                    }
 
-                        spawnStrike(
-                                world,
-                                strikeCenter,
-                                radius,
-                                tntPerStrike,
-                                random
+                    Location strikeCenter = target.clone();
+
+                    // Strike 1 is at the target.
+                    // Strikes 2-5 form a straight line.
+                    int[] offsets = {
+                            0, 32, 64, 96, 128
+                    };
+
+                    strikeCenter.add(
+                            offsets[strikeIndex[0]],
+                            0,
+                            0
+                    );
+
+                    strikeCenter.setY(
+                            Math.min(
+                                    world.getMaxHeight() - 10,
+                                    target.getY() + 50
+                            )
+                    );
+
+                    int remaining =
+                            TNT_PER_STRIKE
+                                    - spawnedThisStrike[0];
+
+                    int batch = Math.min(
+                            TNT_PER_TICK,
+                            remaining
+                    );
+
+                    for (int i = 0; i < batch; i++) {
+
+                        double angle =
+                                random.nextDouble()
+                                        * Math.PI * 2;
+
+                        double distance =
+                                Math.sqrt(random.nextDouble())
+                                        * RADIUS;
+
+                        double x =
+                                strikeCenter.getX()
+                                        + Math.cos(angle)
+                                        * distance;
+
+                        double z =
+                                strikeCenter.getZ()
+                                        + Math.sin(angle)
+                                        * distance;
+
+                        Location spawnLocation =
+                                new Location(
+                                        world,
+                                        x,
+                                        strikeCenter.getY(),
+                                        z
+                                );
+
+                        TNTPrimed tnt =
+                                world.spawn(
+                                        spawnLocation,
+                                        TNTPrimed.class
+                                );
+
+                        tnt.setFuseTicks(80);
+                        tnt.setYield(4.0f);
+                        tnt.setIsIncendiary(false);
+
+                        tnt.setVelocity(
+                                new Vector(0, -0.2, 0)
                         );
 
-                        strikeNumber[0]++;
+                        tnt.setBlockDamage(false);
+
+                        spawnedThisStrike[0]++;
                     }
-                },
-                0L,
-                100L
-        );
-    }
 
-    private void spawnStrike(
-            World world,
-            Location center,
-            int radius,
-            int amount,
-            Random random
-    ) {
+                    if (spawnedThisStrike[0]
+                            >= TNT_PER_STRIKE) {
 
-        final int[] spawned = {0};
+                        strikeIndex[0]++;
+                        spawnedThisStrike[0] = 0;
 
-        Bukkit.getScheduler().runTaskTimer(
-                this,
-                new Runnable() {
+                        if (strikeIndex[0]
+                                < TOTAL_STRIKES) {
 
-                    @Override
-                    public void run() {
-
-                        int batch = Math.min(
-                                10,
-                                amount - spawned[0]
-                        );
-
-                        for (int i = 0; i < batch; i++) {
-
-                            double angle =
-                                    random.nextDouble()
-                                            * Math.PI * 2;
-
-                            double distance =
-                                    Math.sqrt(random.nextDouble())
-                                            * radius;
-
-                            double x =
-                                    center.getX()
-                                            + Math.cos(angle)
-                                            * distance;
-
-                            double z =
-                                    center.getZ()
-                                            + Math.sin(angle)
-                                            * distance;
-
-                            Location spawnLocation =
-                                    new Location(
-                                            world,
-                                            x,
-                                            center.getY(),
-                                            z
-                                    );
-
-                            TNTPrimed tnt =
-                                    world.spawn(
-                                            spawnLocation,
-                                            TNTPrimed.class
-                                    );
-
-                            tnt.setFuseTicks(80);
-                            tnt.setYield(4.0f);
-                            tnt.setIsIncendiary(false);
-
-                            // Slow initial fall.
-                            tnt.setVelocity(
-                                    new Vector(0, -0.2, 0)
-                            );
-
-                            // Keep explosions from damaging blocks.
-                            tnt.setBlockDamage(false);
-
-                            spawned[0]++;
-                        }
-
-                        if (spawned[0] >= amount) {
-                            Bukkit.getScheduler()
-                                    .cancelTask(
-                                            Bukkit.getScheduler()
-                                                    .getCurrentTaskId()
-                                    );
+                            delayTicks[0] = STRIKE_DELAY;
                         }
                     }
+
                 },
                 0L,
                 1L
         );
     }
-          }
+                }
