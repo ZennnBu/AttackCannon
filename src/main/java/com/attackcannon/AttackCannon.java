@@ -217,7 +217,6 @@ public final class AttackCannon extends JavaPlugin {
                                 new Vector(0, -0.2, 0)
                         );
 
-                        tnt.setBlockDamage(false);
 
                         spawnedThisStrike[0]++;
                     }
