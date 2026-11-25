@@ -1,0 +1,22 @@
+
+name: AttackCannon
+version: 1.0.0
+main: com.attackcannon.AttackCannon
+api-version: '26.3'
+author: Zennbu
+description: Advanced 5-strike circular TNT attack plugin
+
+commands:
+  attack:
+    description: Start the AttackCannon strike sequence
+    usage: /attack here
+    permission: attackcannon.use
+
+permissions:
+  attackcannon.use:
+    description: Allows using AttackCannon
+    default: op
+  attackcannon.admin:
+    description: Allows managing AttackCannon
+    default: op
+    
